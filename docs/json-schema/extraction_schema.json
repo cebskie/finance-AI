@@ -1,0 +1,18 @@
+{
+  "document_type": "string",
+  "fields": [
+    {
+      "field_name": "string",
+      "value": "string",
+      "confidence": 0.0,
+      "source_page": 0,
+      "bounding_box": {
+        "x": 0,
+        "y": 0,
+        "width": 0,
+        "height": 0
+      },
+      "extraction_method": "string"
+    }
+  ]
+}

@@ -1,0 +1,52 @@
+from functools import lru_cache
+
+from pydantic import Field
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+class Settings(BaseSettings):
+    app_name: str = "Finance AI Document Processing"
+    app_version: str = "0.1.0"
+    environment: str = Field(default="local", validation_alias="ENVIRONMENT")
+    debug: bool = Field(default=False, validation_alias="DEBUG")
+    log_level: str = Field(default="INFO", validation_alias="LOG_LEVEL")
+    api_v1_prefix: str = "/api/v1"
+
+    postgres_user: str = Field(default="postgres", validation_alias="POSTGRES_USER")
+    postgres_password: str = Field(default="postgres", validation_alias="POSTGRES_PASSWORD")
+    postgres_db: str = Field(default="finance_ai", validation_alias="POSTGRES_DB")
+    postgres_host: str = Field(default="postgres", validation_alias="POSTGRES_HOST")
+    postgres_port: int = Field(default=5432, validation_alias="POSTGRES_PORT")
+
+    redis_host: str = Field(default="redis", validation_alias="REDIS_HOST")
+    redis_port: int = Field(default=6379, validation_alias="REDIS_PORT")
+
+    minio_endpoint: str = Field(default="minio:9000", validation_alias="MINIO_ENDPOINT")
+    minio_root_user: str = Field(default="minio", validation_alias="MINIO_ROOT_USER")
+    minio_root_password: str = Field(default="minio123", validation_alias="MINIO_ROOT_PASSWORD")
+
+    openrouter_api_key: str = Field(default="", validation_alias="OPENROUTER_API_KEY")
+    tesseract_path: str = Field(default="/usr/bin/tesseract", validation_alias="TESSERACT_PATH")
+
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        env_file_encoding="utf-8",
+        extra="ignore",
+    )
+
+    @property
+    def database_url(self) -> str:
+        return (
+            "postgresql+psycopg://"
+            f"{self.postgres_user}:{self.postgres_password}"
+            f"@{self.postgres_host}:{self.postgres_port}/{self.postgres_db}"
+        )
+
+    @property
+    def redis_url(self) -> str:
+        return f"redis://{self.redis_host}:{self.redis_port}/0"
+
+
+@lru_cache
+def get_settings() -> Settings:
+    return Settings()

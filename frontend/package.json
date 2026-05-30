@@ -1,0 +1,8 @@
+{
+  "name": "finance-ai-frontend",
+  "private": true,
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build"
+  }
+}

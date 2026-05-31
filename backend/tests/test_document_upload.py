@@ -88,9 +88,29 @@ class FakePageSplitter:
             raise RuntimeError("split failed")
         return [
             SimpleNamespace(
+                id="page-1",
                 document_id=document.id,
                 page_number=1,
+                storage_bucket="documents",
                 storage_key=f"documents/{document.id}/pages/page-0001.png",
+            )
+        ]
+
+
+class FakePageSegmenter:
+    def __init__(self, *, should_fail: bool = False) -> None:
+        self.should_fail = should_fail
+        self.calls = []
+
+    def segment_page(self, *, page):
+        self.calls.append(page)
+        if self.should_fail:
+            raise RuntimeError("segmentation failed")
+        return [
+            SimpleNamespace(
+                page_id=page.id,
+                object_id="object-0001",
+                processing_status="segmented",
             )
         ]
 
@@ -99,7 +119,8 @@ def build_service(
     *,
     max_upload_bytes: int = 1024,
     page_splitter_should_fail: bool = False,
-) -> tuple[DocumentUploadService, FakeRepository, FakeStorage, FakePageSplitter]:
+    page_segmenter_should_fail: bool = False,
+) -> tuple[DocumentUploadService, FakeRepository, FakeStorage, FakePageSplitter, FakePageSegmenter]:
     settings = Settings(
         DOCUMENT_BUCKET="documents",
         MAX_UPLOAD_BYTES=max_upload_bytes,
@@ -107,55 +128,71 @@ def build_service(
     repository = FakeRepository()
     storage = FakeStorage()
     page_splitter = FakePageSplitter(should_fail=page_splitter_should_fail)
+    page_segmenter = FakePageSegmenter(should_fail=page_segmenter_should_fail)
     service = DocumentUploadService(
         settings=settings,
         repository=repository,
         storage=storage,
         page_splitter=page_splitter,
+        page_segmenter=page_segmenter,
     )
-    return service, repository, storage, page_splitter
+    return service, repository, storage, page_splitter, page_segmenter
 
 
-def test_upload_pdf_stores_file_persists_metadata_and_splits_pages():
-    service, repository, storage, page_splitter = build_service()
+def test_upload_pdf_stores_file_persists_metadata_splits_and_segments_pages():
+    service, repository, storage, page_splitter, page_segmenter = build_service()
 
     document = asyncio.run(service.upload_pdf(FakeUploadFile()))
 
-    assert document.status == "pages_ready"
+    assert document.status == "segmentation_ready"
     assert document.mime_type == "application/pdf"
     assert document.storage_bucket == "documents"
     assert document.storage_key.startswith(f"documents/{document.id}/")
     assert len(storage.uploads) == 1
     assert len(repository.documents) == 1
     assert len(page_splitter.calls) == 1
+    assert len(page_segmenter.calls) == 1
     assert page_splitter.calls[0]["pdf_content"] == b"%PDF-1.7\ncontent"
 
 
 def test_upload_pdf_marks_document_failed_when_page_splitting_fails():
-    service, _, _, page_splitter = build_service(page_splitter_should_fail=True)
+    service, _, _, page_splitter, page_segmenter = build_service(page_splitter_should_fail=True)
 
     document = asyncio.run(service.upload_pdf(FakeUploadFile()))
 
-    assert document.status == "page_split_failed"
+    assert document.status == "page_processing_failed"
     assert len(page_splitter.calls) == 1
+    assert len(page_segmenter.calls) == 0
+
+
+def test_upload_pdf_marks_document_failed_when_page_segmentation_fails():
+    service, _, _, page_splitter, page_segmenter = build_service(
+        page_segmenter_should_fail=True,
+    )
+
+    document = asyncio.run(service.upload_pdf(FakeUploadFile()))
+
+    assert document.status == "page_processing_failed"
+    assert len(page_splitter.calls) == 1
+    assert len(page_segmenter.calls) == 1
 
 
 def test_upload_pdf_rejects_non_pdf_extension():
-    service, _, _, _ = build_service()
+    service, _, _, _, _ = build_service()
 
     with pytest.raises(UploadValidationError, match="Only .pdf files"):
         asyncio.run(service.upload_pdf(FakeUploadFile(filename="statement.txt")))
 
 
 def test_upload_pdf_rejects_invalid_magic_bytes():
-    service, _, _, _ = build_service()
+    service, _, _, _, _ = build_service()
 
     with pytest.raises(UploadValidationError, match="not a valid PDF"):
         asyncio.run(service.upload_pdf(FakeUploadFile(content=b"not a pdf")))
 
 
 def test_upload_pdf_rejects_oversized_file():
-    service, _, _, _ = build_service(max_upload_bytes=8)
+    service, _, _, _, _ = build_service(max_upload_bytes=8)
 
     with pytest.raises(UploadValidationError, match="size limit"):
         asyncio.run(service.upload_pdf(FakeUploadFile(content=b"%PDF-1.7\noversized")))
@@ -168,7 +205,7 @@ class SuccessfulUploadService:
             original_filename=file.filename,
             mime_type="application/pdf",
             size_bytes=14,
-            status="uploaded",
+            status="segmentation_ready",
             storage_bucket="documents",
             storage_key="documents/doc-1/statement.pdf",
             created_at=datetime.now(UTC),
@@ -190,7 +227,7 @@ def test_upload_document_endpoint(client: TestClient):
 
     assert response.status_code == 201
     assert response.json()["id"] == "doc-1"
-    assert response.json()["status"] == "uploaded"
+    assert response.json()["status"] == "segmentation_ready"
 
     client.app.dependency_overrides.clear()
 

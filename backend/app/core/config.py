@@ -13,6 +13,12 @@ class Settings(BaseSettings):
     api_v1_prefix: str = "/api/v1"
     max_upload_bytes: int = Field(default=10 * 1024 * 1024, validation_alias="MAX_UPLOAD_BYTES")
     pdf_split_dpi: int = Field(default=200, validation_alias="PDF_SPLIT_DPI")
+    segmentation_threshold: int = Field(default=245, validation_alias="SEGMENTATION_THRESHOLD")
+    segmentation_min_area: int = Field(default=5000, validation_alias="SEGMENTATION_MIN_AREA")
+    segmentation_merge_padding: int = Field(
+        default=24,
+        validation_alias="SEGMENTATION_MERGE_PADDING",
+    )
 
     postgres_user: str = Field(default="postgres", validation_alias="POSTGRES_USER")
     postgres_password: str = Field(default="postgres", validation_alias="POSTGRES_PASSWORD")

@@ -1,6 +1,6 @@
 from sqlalchemy.orm import Session
 
-from app.documents.models import Document, DocumentPage
+from app.documents.models import Document, DocumentObject, DocumentPage
 
 
 class DocumentRepository:
@@ -68,3 +68,31 @@ class DocumentPageRepository:
         self.session.commit()
         self.session.refresh(page)
         return page
+
+
+class DocumentObjectRepository:
+    def __init__(self, session: Session) -> None:
+        self.session = session
+
+    def create(
+        self,
+        *,
+        page_id: str,
+        object_id: str,
+        bounding_box: dict[str, int],
+        image_storage_bucket: str,
+        image_storage_key: str,
+        processing_status: str,
+    ) -> DocumentObject:
+        document_object = DocumentObject(
+            page_id=page_id,
+            object_id=object_id,
+            bounding_box=bounding_box,
+            image_storage_bucket=image_storage_bucket,
+            image_storage_key=image_storage_key,
+            processing_status=processing_status,
+        )
+        self.session.add(document_object)
+        self.session.commit()
+        self.session.refresh(document_object)
+        return document_object

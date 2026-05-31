@@ -41,14 +41,14 @@ upload workflow retrieves the PDF from MinIO and invokes page splitting.
 Successful upload status progression:
 
 ```text
-uploaded -> processing_pages -> pages_ready
+uploaded -> processing_pages -> segmenting_pages -> segmentation_ready
 ```
 
-If page splitting fails after the original PDF and document row are persisted,
-the document is retained and marked:
+If page splitting or segmentation fails after the original PDF and document row
+are persisted, the document is retained and marked:
 
 ```text
-page_split_failed
+page_processing_failed
 ```
 
 This endpoint does not start OCR or extraction yet.
@@ -84,3 +84,68 @@ Runtime dependency:
 
 The service is currently triggered synchronously by the PDF upload workflow.
 It is not yet wired into an async processing job.
+
+## Page Object Segmentation MVP
+
+The segmentation stage runs after PDF page splitting and before OCR. It detects
+multiple document regions on each page image, crops each region, stores each crop
+in MinIO, and persists metadata for independent OCR processing later.
+
+Service:
+
+```text
+PageSegmentationService.segment_page(page)
+```
+
+Input:
+
+- a `document_pages` row produced by `PdfPageSplittingService`
+- the corresponding page image loaded from MinIO
+
+Detection:
+
+- loads the page PNG with Pillow
+- identifies non-background connected regions
+- filters small regions using `SEGMENTATION_MIN_AREA`
+- merges nearby regions using `SEGMENTATION_MERGE_PADDING`
+
+Cropped object key format:
+
+```text
+documents/{document_id}/pages/page-0001/objects/object-0001.png
+```
+
+Database table:
+
+```text
+document_objects
+- id
+- page_id
+- object_id
+- bounding_box
+- image_storage_bucket
+- image_storage_key
+- processing_status
+- created_at
+```
+
+JSON representation:
+
+```json
+[
+  {
+    "page_id": "page-id",
+    "object_id": "object-0001",
+    "bounding_box": {
+      "x": 20,
+      "y": 20,
+      "width": 200,
+      "height": 240
+    },
+    "image_storage_key": "documents/document-id/pages/page-0001/objects/object-0001.png",
+    "processing_status": "segmented"
+  }
+]
+```
+
+OCR should later consume `document_objects` rows rather than whole page images.

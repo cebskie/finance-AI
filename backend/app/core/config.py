@@ -24,6 +24,7 @@ class Settings(BaseSettings):
     minio_endpoint: str = Field(default="minio:9000", validation_alias="MINIO_ENDPOINT")
     minio_root_user: str = Field(default="minio", validation_alias="MINIO_ROOT_USER")
     minio_root_password: str = Field(default="minio123", validation_alias="MINIO_ROOT_PASSWORD")
+    minio_secure: bool = Field(default=False, validation_alias="MINIO_SECURE")
 
     openrouter_api_key: str = Field(default="", validation_alias="OPENROUTER_API_KEY")
     tesseract_path: str = Field(default="/usr/bin/tesseract", validation_alias="TESSERACT_PATH")

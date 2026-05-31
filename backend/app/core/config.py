@@ -11,6 +11,7 @@ class Settings(BaseSettings):
     debug: bool = Field(default=False, validation_alias="DEBUG")
     log_level: str = Field(default="INFO", validation_alias="LOG_LEVEL")
     api_v1_prefix: str = "/api/v1"
+    max_upload_bytes: int = Field(default=10 * 1024 * 1024, validation_alias="MAX_UPLOAD_BYTES")
 
     postgres_user: str = Field(default="postgres", validation_alias="POSTGRES_USER")
     postgres_password: str = Field(default="postgres", validation_alias="POSTGRES_PASSWORD")
@@ -25,6 +26,7 @@ class Settings(BaseSettings):
     minio_root_user: str = Field(default="minio", validation_alias="MINIO_ROOT_USER")
     minio_root_password: str = Field(default="minio123", validation_alias="MINIO_ROOT_PASSWORD")
     minio_secure: bool = Field(default=False, validation_alias="MINIO_SECURE")
+    document_bucket: str = Field(default="documents", validation_alias="DOCUMENT_BUCKET")
 
     openrouter_api_key: str = Field(default="", validation_alias="OPENROUTER_API_KEY")
     tesseract_path: str = Field(default="/usr/bin/tesseract", validation_alias="TESSERACT_PATH")

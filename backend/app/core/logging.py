@@ -8,6 +8,8 @@ from app.core.config import Settings
 
 
 class JsonFormatter(logging.Formatter):
+    reserved_fields = set(logging.makeLogRecord({}).__dict__)
+
     def format(self, record: logging.LogRecord) -> str:
         payload: dict[str, Any] = {
             "timestamp": datetime.now(UTC).isoformat(),
@@ -15,6 +17,10 @@ class JsonFormatter(logging.Formatter):
             "logger": record.name,
             "message": record.getMessage(),
         }
+
+        for key, value in record.__dict__.items():
+            if key not in self.reserved_fields and key not in payload:
+                payload[key] = value
 
         if record.exc_info:
             payload["exception"] = self.formatException(record.exc_info)

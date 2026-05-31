@@ -7,6 +7,7 @@ from fastapi import UploadFile
 from app.core.config import Settings
 from app.documents.models import Document
 from app.documents.repository import DocumentRepository
+from app.pdf.page_splitter import PdfPageSplittingService
 from app.storage.service import ObjectStorageService
 
 logger = logging.getLogger(__name__)
@@ -23,10 +24,12 @@ class DocumentUploadService:
         settings: Settings,
         repository: DocumentRepository,
         storage: ObjectStorageService,
+        page_splitter: PdfPageSplittingService,
     ) -> None:
         self.settings = settings
         self.repository = repository
         self.storage = storage
+        self.page_splitter = page_splitter
 
     async def upload_pdf(self, file: UploadFile) -> Document:
         content = await file.read()
@@ -70,7 +73,53 @@ class DocumentUploadService:
                 "storage_key": document.storage_key,
             },
         )
+        document = self._split_uploaded_pdf(document)
         return document
+
+    def _split_uploaded_pdf(self, document: Document) -> Document:
+        document = self.repository.update_status(
+            document=document,
+            status="processing_pages",
+        )
+        logger.info(
+            "Retrieving original PDF from object storage for page splitting",
+            extra={
+                "document_id": document.id,
+                "storage_bucket": document.storage_bucket,
+                "storage_key": document.storage_key,
+            },
+        )
+
+        try:
+            pdf_content = self.storage.get_object_bytes(
+                bucket_name=document.storage_bucket,
+                object_key=document.storage_key,
+            )
+            pages = self.page_splitter.split_pdf(
+                document=document,
+                pdf_content=pdf_content,
+            )
+        except Exception:
+            logger.exception(
+                "PDF page splitting failed after upload",
+                extra={"document_id": document.id},
+            )
+            return self.repository.update_status(
+                document=document,
+                status="page_split_failed",
+            )
+
+        logger.info(
+            "PDF page images persisted",
+            extra={
+                "document_id": document.id,
+                "page_count": len(pages),
+            },
+        )
+        return self.repository.update_status(
+            document=document,
+            status="pages_ready",
+        )
 
     def _validate_pdf(self, file: UploadFile, content: bytes) -> None:
         filename = file.filename or ""

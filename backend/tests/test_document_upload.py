@@ -29,6 +29,7 @@ class FakeUploadFile:
 class FakeStorage:
     def __init__(self) -> None:
         self.uploads = []
+        self.objects = {}
 
     def upload_pdf(self, *, bucket_name: str, object_key: str, content: bytes) -> None:
         self.uploads.append(
@@ -38,6 +39,10 @@ class FakeStorage:
                 "content": content,
             }
         )
+        self.objects[(bucket_name, object_key)] = content
+
+    def get_object_bytes(self, *, bucket_name: str, object_key: str) -> bytes:
+        return self.objects[(bucket_name, object_key)]
 
 
 class FakeRepository:
@@ -67,54 +72,90 @@ class FakeRepository:
         self.documents.append(document)
         return document
 
+    def update_status(self, *, document, status: str):
+        document.status = status
+        return document
+
+
+class FakePageSplitter:
+    def __init__(self, *, should_fail: bool = False) -> None:
+        self.should_fail = should_fail
+        self.calls = []
+
+    def split_pdf(self, *, document, pdf_content: bytes):
+        self.calls.append({"document": document, "pdf_content": pdf_content})
+        if self.should_fail:
+            raise RuntimeError("split failed")
+        return [
+            SimpleNamespace(
+                document_id=document.id,
+                page_number=1,
+                storage_key=f"documents/{document.id}/pages/page-0001.png",
+            )
+        ]
+
 
 def build_service(
     *,
     max_upload_bytes: int = 1024,
-) -> tuple[DocumentUploadService, FakeRepository, FakeStorage]:
+    page_splitter_should_fail: bool = False,
+) -> tuple[DocumentUploadService, FakeRepository, FakeStorage, FakePageSplitter]:
     settings = Settings(
         DOCUMENT_BUCKET="documents",
         MAX_UPLOAD_BYTES=max_upload_bytes,
     )
     repository = FakeRepository()
     storage = FakeStorage()
+    page_splitter = FakePageSplitter(should_fail=page_splitter_should_fail)
     service = DocumentUploadService(
         settings=settings,
         repository=repository,
         storage=storage,
+        page_splitter=page_splitter,
     )
-    return service, repository, storage
+    return service, repository, storage, page_splitter
 
 
-def test_upload_pdf_stores_file_and_persists_metadata():
-    service, repository, storage = build_service()
+def test_upload_pdf_stores_file_persists_metadata_and_splits_pages():
+    service, repository, storage, page_splitter = build_service()
 
     document = asyncio.run(service.upload_pdf(FakeUploadFile()))
 
-    assert document.status == "uploaded"
+    assert document.status == "pages_ready"
     assert document.mime_type == "application/pdf"
     assert document.storage_bucket == "documents"
     assert document.storage_key.startswith(f"documents/{document.id}/")
     assert len(storage.uploads) == 1
     assert len(repository.documents) == 1
+    assert len(page_splitter.calls) == 1
+    assert page_splitter.calls[0]["pdf_content"] == b"%PDF-1.7\ncontent"
+
+
+def test_upload_pdf_marks_document_failed_when_page_splitting_fails():
+    service, _, _, page_splitter = build_service(page_splitter_should_fail=True)
+
+    document = asyncio.run(service.upload_pdf(FakeUploadFile()))
+
+    assert document.status == "page_split_failed"
+    assert len(page_splitter.calls) == 1
 
 
 def test_upload_pdf_rejects_non_pdf_extension():
-    service, _, _ = build_service()
+    service, _, _, _ = build_service()
 
     with pytest.raises(UploadValidationError, match="Only .pdf files"):
         asyncio.run(service.upload_pdf(FakeUploadFile(filename="statement.txt")))
 
 
 def test_upload_pdf_rejects_invalid_magic_bytes():
-    service, _, _ = build_service()
+    service, _, _, _ = build_service()
 
     with pytest.raises(UploadValidationError, match="not a valid PDF"):
         asyncio.run(service.upload_pdf(FakeUploadFile(content=b"not a pdf")))
 
 
 def test_upload_pdf_rejects_oversized_file():
-    service, _, _ = build_service(max_upload_bytes=8)
+    service, _, _, _ = build_service(max_upload_bytes=8)
 
     with pytest.raises(UploadValidationError, match="size limit"):
         asyncio.run(service.upload_pdf(FakeUploadFile(content=b"%PDF-1.7\noversized")))

@@ -12,6 +12,7 @@ class Settings(BaseSettings):
     log_level: str = Field(default="INFO", validation_alias="LOG_LEVEL")
     api_v1_prefix: str = "/api/v1"
     max_upload_bytes: int = Field(default=10 * 1024 * 1024, validation_alias="MAX_UPLOAD_BYTES")
+    pdf_split_dpi: int = Field(default=200, validation_alias="PDF_SPLIT_DPI")
 
     postgres_user: str = Field(default="postgres", validation_alias="POSTGRES_USER")
     postgres_password: str = Field(default="postgres", validation_alias="POSTGRES_PASSWORD")
@@ -30,6 +31,7 @@ class Settings(BaseSettings):
 
     openrouter_api_key: str = Field(default="", validation_alias="OPENROUTER_API_KEY")
     tesseract_path: str = Field(default="/usr/bin/tesseract", validation_alias="TESSERACT_PATH")
+    poppler_path: str = Field(default="", validation_alias="POPPLER_PATH")
 
     model_config = SettingsConfigDict(
         env_file=".env",

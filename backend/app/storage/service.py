@@ -18,11 +18,34 @@ class ObjectStorageService:
         object_key: str,
         content: bytes,
     ) -> None:
+        self.upload_bytes(
+            bucket_name=bucket_name,
+            object_key=object_key,
+            content=content,
+            content_type="application/pdf",
+        )
+
+    def upload_bytes(
+        self,
+        *,
+        bucket_name: str,
+        object_key: str,
+        content: bytes,
+        content_type: str,
+    ) -> None:
         self.ensure_bucket(bucket_name)
         self.client.put_object(
             bucket_name,
             object_key,
             BytesIO(content),
             length=len(content),
-            content_type="application/pdf",
+            content_type=content_type,
         )
+
+    def get_object_bytes(self, *, bucket_name: str, object_key: str) -> bytes:
+        response = self.client.get_object(bucket_name, object_key)
+        try:
+            return response.read()
+        finally:
+            response.close()
+            response.release_conn()

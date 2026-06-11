@@ -69,6 +69,65 @@ class DocumentPageRepository:
         self.session.refresh(page)
         return page
 
+    def mark_preprocessed(
+        self,
+        *,
+        page: DocumentPage,
+        preprocessed_storage_key: str,
+        preprocessing_metadata: dict,
+    ) -> DocumentPage:
+        page.preprocessed_storage_key = preprocessed_storage_key
+        page.preprocessing_metadata = preprocessing_metadata
+        page.processing_status = "preprocessed"
+        self.session.add(page)
+        self.session.commit()
+        self.session.refresh(page)
+        return page
+
+    def mark_ocr_completed(
+        self,
+        *,
+        page: DocumentPage,
+        text: str,
+        ocr_metadata: dict,
+    ) -> DocumentPage:
+        page.ocr_text = text
+        page.ocr_metadata = ocr_metadata
+        page.processing_status = "ocr_completed"
+        self.session.add(page)
+        self.session.commit()
+        self.session.refresh(page)
+        return page
+
+    def mark_classified(
+        self,
+        *,
+        page: DocumentPage,
+        document_type: str,
+        confidence: float,
+        classification_metadata: dict,
+    ) -> DocumentPage:
+        page.document_type = document_type
+        page.classification_confidence = round(confidence * 100)
+        page.classification_metadata = classification_metadata
+        page.processing_status = "classified"
+        self.session.add(page)
+        self.session.commit()
+        self.session.refresh(page)
+        return page
+
+    def mark_segmentation_fallback(
+        self,
+        *,
+        page: DocumentPage,
+        segmentation_metadata: dict,
+    ) -> DocumentPage:
+        page.segmentation_metadata = segmentation_metadata
+        self.session.add(page)
+        self.session.commit()
+        self.session.refresh(page)
+        return page
+
 
 class DocumentObjectRepository:
     def __init__(self, session: Session) -> None:

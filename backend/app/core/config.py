@@ -13,6 +13,24 @@ class Settings(BaseSettings):
     api_v1_prefix: str = "/api/v1"
     max_upload_bytes: int = Field(default=10 * 1024 * 1024, validation_alias="MAX_UPLOAD_BYTES")
     pdf_split_dpi: int = Field(default=200, validation_alias="PDF_SPLIT_DPI")
+    preprocessed_image_suffix: str = Field(
+        default="-preprocessed.png",
+        validation_alias="PREPROCESSED_IMAGE_SUFFIX",
+    )
+    ocr_language: str = Field(default="eng", validation_alias="OCR_LANGUAGE")
+    ocr_min_confidence: float = Field(default=55.0, validation_alias="OCR_MIN_CONFIDENCE")
+    classification_rules_path: str = Field(
+        default="",
+        validation_alias="CLASSIFICATION_RULES_PATH",
+    )
+    classification_min_confidence: float = Field(
+        default=0.45,
+        validation_alias="CLASSIFICATION_MIN_CONFIDENCE",
+    )
+    segmentation_fallback_min_regions: int = Field(
+        default=2,
+        validation_alias="SEGMENTATION_FALLBACK_MIN_REGIONS",
+    )
     segmentation_threshold: int = Field(default=245, validation_alias="SEGMENTATION_THRESHOLD")
     segmentation_min_area: int = Field(default=5000, validation_alias="SEGMENTATION_MIN_AREA")
     segmentation_merge_padding: int = Field(

@@ -47,6 +47,15 @@ class DocumentPage(Base):
     storage_bucket: Mapped[str] = mapped_column(String(100), nullable=False)
     storage_key: Mapped[str] = mapped_column(String(500), nullable=False, unique=True)
     size_bytes: Mapped[int] = mapped_column(Integer, nullable=False)
+    preprocessed_storage_key: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    preprocessing_metadata: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    ocr_text: Mapped[str | None] = mapped_column(String, nullable=True)
+    ocr_metadata: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    document_type: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    classification_confidence: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    classification_metadata: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    segmentation_metadata: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    processing_status: Mapped[str] = mapped_column(String(50), nullable=False, default="split")
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         default=lambda: datetime.now(UTC),

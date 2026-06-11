@@ -9,13 +9,17 @@ from app.core.config import Settings, get_settings
 from app.core.database import get_db_session
 from app.core.minio import create_minio_client
 from app.core.redis import create_redis_client
+from app.classification.service import PageClassificationService
 from app.documents.repository import (
     DocumentObjectRepository,
     DocumentPageRepository,
     DocumentRepository,
 )
 from app.documents.service import DocumentUploadService
+from app.ocr.service import FullPageOcrService
 from app.pdf.page_splitter import PdfPageSplittingService
+from app.pipeline.page_processing import PageProcessingPipeline
+from app.preprocessing.service import PagePreprocessingService
 from app.segmentation.service import PageSegmentationService
 from app.storage.service import ObjectStorageService
 
@@ -88,17 +92,63 @@ def get_page_segmentation_service(
     )
 
 
+def get_page_preprocessing_service(
+    settings: Settings = Depends(get_app_settings),
+    page_repository: DocumentPageRepository = Depends(get_document_page_repository),
+    storage: ObjectStorageService = Depends(get_object_storage_service),
+) -> PagePreprocessingService:
+    return PagePreprocessingService(
+        settings=settings,
+        page_repository=page_repository,
+        storage=storage,
+    )
+
+
+def get_full_page_ocr_service(
+    settings: Settings = Depends(get_app_settings),
+    page_repository: DocumentPageRepository = Depends(get_document_page_repository),
+) -> FullPageOcrService:
+    return FullPageOcrService(
+        settings=settings,
+        page_repository=page_repository,
+    )
+
+
+def get_page_classification_service(
+    settings: Settings = Depends(get_app_settings),
+) -> PageClassificationService:
+    return PageClassificationService(settings=settings)
+
+
+def get_page_processing_pipeline(
+    settings: Settings = Depends(get_app_settings),
+    page_repository: DocumentPageRepository = Depends(get_document_page_repository),
+    preprocessor: PagePreprocessingService = Depends(get_page_preprocessing_service),
+    ocr: FullPageOcrService = Depends(get_full_page_ocr_service),
+    classifier: PageClassificationService = Depends(get_page_classification_service),
+    segmenter: PageSegmentationService = Depends(get_page_segmentation_service),
+) -> PageProcessingPipeline:
+    return PageProcessingPipeline(
+        settings=settings,
+        page_repository=page_repository,
+        preprocessor=preprocessor,
+        ocr=ocr,
+        classifier=classifier,
+        segmenter=segmenter,
+    )
+
+
 def get_document_upload_service(
     settings: Settings = Depends(get_app_settings),
     repository: DocumentRepository = Depends(get_document_repository),
     storage: ObjectStorageService = Depends(get_object_storage_service),
     page_splitter: PdfPageSplittingService = Depends(get_pdf_page_splitting_service),
-    page_segmenter: PageSegmentationService = Depends(get_page_segmentation_service),
+    page_pipeline: PageProcessingPipeline = Depends(get_page_processing_pipeline),
 ) -> DocumentUploadService:
     return DocumentUploadService(
         settings=settings,
         repository=repository,
         storage=storage,
         page_splitter=page_splitter,
-        page_segmenter=page_segmenter,
+        page_pipeline=page_pipeline,
     )

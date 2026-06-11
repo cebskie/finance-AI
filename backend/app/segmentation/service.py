@@ -137,6 +137,17 @@ class PageSegmentationService:
         boxes = [box for box in boxes if box.area >= self.settings.segmentation_min_area]
         return sorted(boxes, key=lambda box: (box.y, box.x))
 
+    def detect_independent_regions(self, image: Image.Image) -> list[BoundingBox]:
+        page_area = image.width * image.height
+        boxes = self.detect_regions(image)
+        return [
+            box
+            for box in boxes
+            if box.area < page_area * 0.85
+            and box.width < image.width * 0.95
+            and box.height < image.height * 0.95
+        ]
+
     def to_json(self, objects: list[DocumentObject]) -> str:
         payload = [
             {

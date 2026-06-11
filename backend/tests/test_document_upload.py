@@ -97,30 +97,24 @@ class FakePageSplitter:
         ]
 
 
-class FakePageSegmenter:
+class FakePagePipeline:
     def __init__(self, *, should_fail: bool = False) -> None:
         self.should_fail = should_fail
         self.calls = []
 
-    def segment_page(self, *, page):
+    def process_page(self, *, page):
         self.calls.append(page)
         if self.should_fail:
-            raise RuntimeError("segmentation failed")
-        return [
-            SimpleNamespace(
-                page_id=page.id,
-                object_id="object-0001",
-                processing_status="segmented",
-            )
-        ]
+            raise RuntimeError("page pipeline failed")
+        return SimpleNamespace(segmentation_object_count=1)
 
 
 def build_service(
     *,
     max_upload_bytes: int = 1024,
     page_splitter_should_fail: bool = False,
-    page_segmenter_should_fail: bool = False,
-) -> tuple[DocumentUploadService, FakeRepository, FakeStorage, FakePageSplitter, FakePageSegmenter]:
+    page_pipeline_should_fail: bool = False,
+) -> tuple[DocumentUploadService, FakeRepository, FakeStorage, FakePageSplitter, FakePagePipeline]:
     settings = Settings(
         DOCUMENT_BUCKET="documents",
         MAX_UPLOAD_BYTES=max_upload_bytes,
@@ -128,53 +122,53 @@ def build_service(
     repository = FakeRepository()
     storage = FakeStorage()
     page_splitter = FakePageSplitter(should_fail=page_splitter_should_fail)
-    page_segmenter = FakePageSegmenter(should_fail=page_segmenter_should_fail)
+    page_pipeline = FakePagePipeline(should_fail=page_pipeline_should_fail)
     service = DocumentUploadService(
         settings=settings,
         repository=repository,
         storage=storage,
         page_splitter=page_splitter,
-        page_segmenter=page_segmenter,
+        page_pipeline=page_pipeline,
     )
-    return service, repository, storage, page_splitter, page_segmenter
+    return service, repository, storage, page_splitter, page_pipeline
 
 
-def test_upload_pdf_stores_file_persists_metadata_splits_and_segments_pages():
-    service, repository, storage, page_splitter, page_segmenter = build_service()
+def test_upload_pdf_stores_file_persists_metadata_splits_and_processes_pages():
+    service, repository, storage, page_splitter, page_pipeline = build_service()
 
     document = asyncio.run(service.upload_pdf(FakeUploadFile()))
 
-    assert document.status == "segmentation_ready"
+    assert document.status == "classification_ready"
     assert document.mime_type == "application/pdf"
     assert document.storage_bucket == "documents"
     assert document.storage_key.startswith(f"documents/{document.id}/")
     assert len(storage.uploads) == 1
     assert len(repository.documents) == 1
     assert len(page_splitter.calls) == 1
-    assert len(page_segmenter.calls) == 1
+    assert len(page_pipeline.calls) == 1
     assert page_splitter.calls[0]["pdf_content"] == b"%PDF-1.7\ncontent"
 
 
 def test_upload_pdf_marks_document_failed_when_page_splitting_fails():
-    service, _, _, page_splitter, page_segmenter = build_service(page_splitter_should_fail=True)
+    service, _, _, page_splitter, page_pipeline = build_service(page_splitter_should_fail=True)
 
     document = asyncio.run(service.upload_pdf(FakeUploadFile()))
 
     assert document.status == "page_processing_failed"
     assert len(page_splitter.calls) == 1
-    assert len(page_segmenter.calls) == 0
+    assert len(page_pipeline.calls) == 0
 
 
-def test_upload_pdf_marks_document_failed_when_page_segmentation_fails():
-    service, _, _, page_splitter, page_segmenter = build_service(
-        page_segmenter_should_fail=True,
+def test_upload_pdf_marks_document_failed_when_page_pipeline_fails():
+    service, _, _, page_splitter, page_pipeline = build_service(
+        page_pipeline_should_fail=True,
     )
 
     document = asyncio.run(service.upload_pdf(FakeUploadFile()))
 
     assert document.status == "page_processing_failed"
     assert len(page_splitter.calls) == 1
-    assert len(page_segmenter.calls) == 1
+    assert len(page_pipeline.calls) == 1
 
 
 def test_upload_pdf_rejects_non_pdf_extension():
@@ -205,7 +199,7 @@ class SuccessfulUploadService:
             original_filename=file.filename,
             mime_type="application/pdf",
             size_bytes=14,
-            status="segmentation_ready",
+            status="classification_ready",
             storage_bucket="documents",
             storage_key="documents/doc-1/statement.pdf",
             created_at=datetime.now(UTC),
@@ -227,7 +221,7 @@ def test_upload_document_endpoint(client: TestClient):
 
     assert response.status_code == 201
     assert response.json()["id"] == "doc-1"
-    assert response.json()["status"] == "segmentation_ready"
+    assert response.json()["status"] == "classification_ready"
 
     client.app.dependency_overrides.clear()
 

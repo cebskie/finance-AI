@@ -8,7 +8,7 @@ from app.core.config import Settings
 from app.documents.models import Document
 from app.documents.repository import DocumentRepository
 from app.pdf.page_splitter import PdfPageSplittingService
-from app.segmentation.service import PageSegmentationService
+from app.pipeline.page_processing import PageProcessingPipeline
 from app.storage.service import ObjectStorageService
 
 logger = logging.getLogger(__name__)
@@ -26,13 +26,13 @@ class DocumentUploadService:
         repository: DocumentRepository,
         storage: ObjectStorageService,
         page_splitter: PdfPageSplittingService,
-        page_segmenter: PageSegmentationService,
+        page_pipeline: PageProcessingPipeline,
     ) -> None:
         self.settings = settings
         self.repository = repository
         self.storage = storage
         self.page_splitter = page_splitter
-        self.page_segmenter = page_segmenter
+        self.page_pipeline = page_pipeline
 
     async def upload_pdf(self, file: UploadFile) -> Document:
         content = await file.read()
@@ -104,11 +104,12 @@ class DocumentUploadService:
             )
             document = self.repository.update_status(
                 document=document,
-                status="segmenting_pages",
+                status="classifying_pages",
             )
             segmented_object_count = 0
             for page in pages:
-                segmented_object_count += len(self.page_segmenter.segment_page(page=page))
+                result = self.page_pipeline.process_page(page=page)
+                segmented_object_count += result.segmentation_object_count
         except Exception:
             logger.exception(
                 "PDF page processing failed after upload",
@@ -120,7 +121,7 @@ class DocumentUploadService:
             )
 
         logger.info(
-            "PDF page images and segmented objects persisted",
+            "PDF pages preprocessed, OCRed, and classified",
             extra={
                 "document_id": document.id,
                 "page_count": len(pages),
@@ -129,7 +130,7 @@ class DocumentUploadService:
         )
         return self.repository.update_status(
             document=document,
-            status="segmentation_ready",
+            status="classification_ready",
         )
 
     def _validate_pdf(self, file: UploadFile, content: bytes) -> None:

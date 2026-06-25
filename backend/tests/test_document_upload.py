@@ -5,7 +5,12 @@ from types import SimpleNamespace
 from fastapi.testclient import TestClient
 import pytest
 
-from app.api.dependencies import get_document_upload_service
+from app.api.dependencies import (
+    get_document_object_repository,
+    get_document_page_repository,
+    get_document_repository,
+    get_document_upload_service,
+)
 from app.core.config import Settings
 from app.documents.service import DocumentUploadService, UploadValidationError
 
@@ -238,5 +243,121 @@ def test_upload_document_endpoint_validation_error(client: TestClient):
 
     assert response.status_code == 400
     assert response.json()["detail"] == "Only .pdf files are supported."
+
+    client.app.dependency_overrides.clear()
+
+
+class FakeReportDocumentRepository:
+    def __init__(self, document=None) -> None:
+        self.document = document
+
+    def get_by_id(self, *, document_id: str):
+        return self.document
+
+
+class FakeReportPageRepository:
+    def __init__(self, pages) -> None:
+        self.pages = pages
+
+    def list_by_document_id(self, *, document_id: str):
+        return self.pages
+
+
+class FakeReportObjectRepository:
+    def __init__(self, counts) -> None:
+        self.counts = counts
+
+    def count_by_page_ids(self, *, page_ids: list[str]):
+        return {page_id: self.counts.get(page_id, 0) for page_id in page_ids}
+
+
+def test_processing_report_endpoint_returns_page_debug_summary(client: TestClient):
+    document = SimpleNamespace(id="doc-1", original_filename="statement.pdf")
+    pages = [
+        SimpleNamespace(
+            id="page-1",
+            page_number=1,
+            document_type="vendor_invoice",
+            classification_confidence=91,
+            ocr_text="Invoice total 100",
+            classification_metadata={
+                "extraction_json": {
+                    "document_type": "vendor_invoice",
+                    "fields": [{"name": "total", "value": "100"}],
+                }
+            },
+            ocr_metadata=None,
+            preprocessing_metadata=None,
+            segmentation_metadata=None,
+        ),
+        SimpleNamespace(
+            id="page-2",
+            page_number=2,
+            document_type=None,
+            classification_confidence=None,
+            ocr_text=None,
+            classification_metadata=None,
+            ocr_metadata=None,
+            preprocessing_metadata=None,
+            segmentation_metadata=None,
+        ),
+    ]
+
+    client.app.dependency_overrides[get_document_repository] = lambda: FakeReportDocumentRepository(
+        document
+    )
+    client.app.dependency_overrides[get_document_page_repository] = lambda: FakeReportPageRepository(
+        pages
+    )
+    client.app.dependency_overrides[get_document_object_repository] = (
+        lambda: FakeReportObjectRepository({"page-1": 3})
+    )
+
+    response = client.get("/api/v1/documents/doc-1/processing-report")
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "document_id": "doc-1",
+        "original_filename": "statement.pdf",
+        "page_count": 2,
+        "pages": [
+            {
+                "page_number": 1,
+                "document_type": "vendor_invoice",
+                "classification_confidence": 91,
+                "ocr_text_length": 17,
+                "segmentation_object_count": 3,
+                "extraction_json": {
+                    "document_type": "vendor_invoice",
+                    "fields": [{"name": "total", "value": "100"}],
+                },
+            },
+            {
+                "page_number": 2,
+                "document_type": None,
+                "classification_confidence": None,
+                "ocr_text_length": 0,
+                "segmentation_object_count": 0,
+                "extraction_json": None,
+            },
+        ],
+    }
+
+    client.app.dependency_overrides.clear()
+
+
+def test_processing_report_endpoint_returns_404_for_unknown_document(client: TestClient):
+    client.app.dependency_overrides[get_document_repository] = lambda: FakeReportDocumentRepository()
+    client.app.dependency_overrides[get_document_page_repository] = lambda: FakeReportPageRepository(
+        []
+    )
+    client.app.dependency_overrides[get_document_object_repository] = (
+        lambda: FakeReportObjectRepository({})
+    )
+
+    response = client.get("/api/v1/documents/missing/processing-report")
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == "Document not found."
 
     client.app.dependency_overrides.clear()

@@ -56,16 +56,20 @@ class PageProcessingPipeline:
             text=ocr_result.text,
             ocr_confidence=ocr_result.confidence,
         )
-        self.page_repository.mark_classified(
-            page=page,
-            document_type=classification.document_type,
-            confidence=classification.confidence,
-            classification_metadata=classification.metadata,
-        )
         extraction = self.extractor.extract_json(
             ocr=ocr_result,
             classification=classification,
             page_number=page.page_number,
+        )
+        classification_metadata = {
+            **classification.metadata,
+            "extraction_json": extraction,
+        }
+        self.page_repository.mark_classified(
+            page=page,
+            document_type=classification.document_type,
+            confidence=classification.confidence,
+            classification_metadata=classification_metadata,
         )
         logger.info(
             "Structured extraction completed",

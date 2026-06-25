@@ -1,4 +1,5 @@
 from sqlalchemy.orm import Session
+from sqlalchemy import func
 
 from app.documents.models import Document, DocumentObject, DocumentPage
 
@@ -36,6 +37,9 @@ class DocumentRepository:
         self.session.commit()
         self.session.refresh(document)
         return document
+
+    def get_by_id(self, *, document_id: str) -> Document | None:
+        return self.session.get(Document, document_id)
 
 
 class DocumentPageRepository:
@@ -128,6 +132,14 @@ class DocumentPageRepository:
         self.session.refresh(page)
         return page
 
+    def list_by_document_id(self, *, document_id: str) -> list[DocumentPage]:
+        return (
+            self.session.query(DocumentPage)
+            .filter(DocumentPage.document_id == document_id)
+            .order_by(DocumentPage.page_number)
+            .all()
+        )
+
 
 class DocumentObjectRepository:
     def __init__(self, session: Session) -> None:
@@ -155,3 +167,15 @@ class DocumentObjectRepository:
         self.session.commit()
         self.session.refresh(document_object)
         return document_object
+
+    def count_by_page_ids(self, *, page_ids: list[str]) -> dict[str, int]:
+        if not page_ids:
+            return {}
+
+        rows = (
+            self.session.query(DocumentObject.page_id, func.count(DocumentObject.id))
+            .filter(DocumentObject.page_id.in_(page_ids))
+            .group_by(DocumentObject.page_id)
+            .all()
+        )
+        return {page_id: count for page_id, count in rows}

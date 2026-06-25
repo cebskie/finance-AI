@@ -18,7 +18,13 @@ class FakePageRepository:
         self.segmentation = []
 
     def mark_classified(self, *, page, document_type: str, confidence: float, classification_metadata: dict):
-        self.classified.append(document_type)
+        self.classified.append(
+            {
+                "document_type": document_type,
+                "confidence": confidence,
+                "classification_metadata": classification_metadata,
+            }
+        )
         return page
 
     def mark_segmentation_fallback(self, *, page, segmentation_metadata: dict):
@@ -49,7 +55,7 @@ class FakeClassifier:
             document_type="vendor_invoice",
             label="Vendor Invoice Documents",
             confidence=0.9,
-            metadata={},
+            metadata={"rule": "invoice_keyword"},
         )
 
 
@@ -135,6 +141,21 @@ def test_pipeline_runs_segmentation_only_when_multiple_regions_are_detected():
 
     assert result.classification.document_type == "vendor_invoice"
     assert result.extraction["document_type"] == "vendor_invoice"
+    assert page_repository.classified == [
+        {
+            "document_type": "vendor_invoice",
+            "confidence": 0.9,
+            "classification_metadata": {
+                "rule": "invoice_keyword",
+                "extraction_json": {
+                    "document_type": "vendor_invoice",
+                    "extraction_confidence": 0.8,
+                    "fields": [],
+                    "raw_ocr_text": "Invoice Number 123 Amount Due",
+                },
+            },
+        }
+    ]
     assert extractor.calls == [
         {
             "ocr_text": "Invoice Number 123 Amount Due",

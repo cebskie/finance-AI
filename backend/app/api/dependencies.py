@@ -16,6 +16,7 @@ from app.documents.repository import (
     DocumentRepository,
 )
 from app.documents.service import DocumentUploadService
+from app.extraction.service import StructuredExtractionService
 from app.ocr.service import FullPageOcrService
 from app.pdf.page_splitter import PdfPageSplittingService
 from app.pipeline.page_processing import PageProcessingPipeline
@@ -120,12 +121,17 @@ def get_page_classification_service(
     return PageClassificationService(settings=settings)
 
 
+def get_structured_extraction_service() -> StructuredExtractionService:
+    return StructuredExtractionService()
+
+
 def get_page_processing_pipeline(
     settings: Settings = Depends(get_app_settings),
     page_repository: DocumentPageRepository = Depends(get_document_page_repository),
     preprocessor: PagePreprocessingService = Depends(get_page_preprocessing_service),
     ocr: FullPageOcrService = Depends(get_full_page_ocr_service),
     classifier: PageClassificationService = Depends(get_page_classification_service),
+    extractor: StructuredExtractionService = Depends(get_structured_extraction_service),
     segmenter: PageSegmentationService = Depends(get_page_segmentation_service),
 ) -> PageProcessingPipeline:
     return PageProcessingPipeline(
@@ -134,6 +140,7 @@ def get_page_processing_pipeline(
         preprocessor=preprocessor,
         ocr=ocr,
         classifier=classifier,
+        extractor=extractor,
         segmenter=segmenter,
     )
 

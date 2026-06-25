@@ -53,6 +53,26 @@ class FakeClassifier:
         )
 
 
+class FakeExtractor:
+    def __init__(self) -> None:
+        self.calls = []
+
+    def extract_json(self, *, ocr: OcrResult, classification: PageClassificationResult, page_number: int):
+        self.calls.append(
+            {
+                "ocr_text": ocr.text,
+                "document_type": classification.document_type,
+                "page_number": page_number,
+            }
+        )
+        return {
+            "document_type": classification.document_type,
+            "extraction_confidence": 0.8,
+            "fields": [],
+            "raw_ocr_text": ocr.text,
+        }
+
+
 class FakeObjectRepository:
     def __init__(self) -> None:
         self.objects = []
@@ -88,6 +108,7 @@ def multi_region_image_bytes() -> bytes:
 def test_pipeline_runs_segmentation_only_when_multiple_regions_are_detected():
     image_bytes = multi_region_image_bytes()
     page_repository = FakePageRepository()
+    extractor = FakeExtractor()
     segmenter = PageSegmentationService(
         settings=Settings(SEGMENTATION_MIN_AREA=1000, SEGMENTATION_MERGE_PADDING=8),
         object_repository=FakeObjectRepository(),
@@ -99,6 +120,7 @@ def test_pipeline_runs_segmentation_only_when_multiple_regions_are_detected():
         preprocessor=FakePreprocessor(image_bytes),
         ocr=FakeOcr(),
         classifier=FakeClassifier(),
+        extractor=extractor,
         segmenter=segmenter,
     )
     page = SimpleNamespace(
@@ -112,5 +134,13 @@ def test_pipeline_runs_segmentation_only_when_multiple_regions_are_detected():
     result = pipeline.process_page(page=page)
 
     assert result.classification.document_type == "vendor_invoice"
+    assert result.extraction["document_type"] == "vendor_invoice"
+    assert extractor.calls == [
+        {
+            "ocr_text": "Invoice Number 123 Amount Due",
+            "document_type": "vendor_invoice",
+            "page_number": 1,
+        }
+    ]
     assert result.segmentation_object_count == 2
     assert page_repository.segmentation[0]["triggered"] is True

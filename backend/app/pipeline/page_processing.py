@@ -8,6 +8,7 @@ from app.classification.service import PageClassificationService, PageClassifica
 from app.core.config import Settings
 from app.documents.models import DocumentPage
 from app.documents.repository import DocumentPageRepository
+from app.extraction.service import StructuredExtractionService
 from app.ocr.service import FullPageOcrService, OcrResult
 from app.preprocessing.service import PagePreprocessingService, PagePreprocessingResult
 from app.segmentation.service import PageSegmentationService
@@ -21,6 +22,7 @@ class PageProcessingResult:
     preprocessing: PagePreprocessingResult
     ocr: OcrResult
     classification: PageClassificationResult
+    extraction: dict
     segmentation_object_count: int
 
 
@@ -33,6 +35,7 @@ class PageProcessingPipeline:
         preprocessor: PagePreprocessingService,
         ocr: FullPageOcrService,
         classifier: PageClassificationService,
+        extractor: StructuredExtractionService,
         segmenter: PageSegmentationService,
     ) -> None:
         self.settings = settings
@@ -40,6 +43,7 @@ class PageProcessingPipeline:
         self.preprocessor = preprocessor
         self.ocr = ocr
         self.classifier = classifier
+        self.extractor = extractor
         self.segmenter = segmenter
 
     def process_page(self, *, page: DocumentPage) -> PageProcessingResult:
@@ -58,6 +62,21 @@ class PageProcessingPipeline:
             confidence=classification.confidence,
             classification_metadata=classification.metadata,
         )
+        extraction = self.extractor.extract_json(
+            ocr=ocr_result,
+            classification=classification,
+            page_number=page.page_number,
+        )
+        logger.info(
+            "Structured extraction completed",
+            extra={
+                "page_id": page.id,
+                "document_id": page.document_id,
+                "page_number": page.page_number,
+                "document_type": classification.document_type,
+                "extraction_json": extraction,
+            },
+        )
         segmentation_object_count = self._run_segmentation_fallback_if_needed(
             page=page,
             image_bytes=preprocessing.image_bytes,
@@ -67,6 +86,7 @@ class PageProcessingPipeline:
             preprocessing=preprocessing,
             ocr=ocr_result,
             classification=classification,
+            extraction=extraction,
             segmentation_object_count=segmentation_object_count,
         )
 

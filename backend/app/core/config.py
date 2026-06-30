@@ -10,6 +10,7 @@ class Settings(BaseSettings):
     api_v1_prefix: str = "/api/v1"
 
     database_url: str
+    log_level: str = "INFO"
 
     model_config = SettingsConfigDict(
         env_file=".env",

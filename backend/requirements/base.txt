@@ -11,3 +11,4 @@ pytesseract==0.3.13
 numpy==2.2.1
 opencv-python-headless==4.10.0.84
 python-multipart==0.0.20
+psycopg2-binary==2.9.9

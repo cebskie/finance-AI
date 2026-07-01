@@ -1,13 +1,13 @@
 from collections.abc import Generator
 
 from fastapi import Depends
-from minio import Minio
+from supabase import Client
 from redis import Redis
 from sqlalchemy.orm import Session
 
 from app.core.config import Settings, get_settings
 from app.core.database import get_db_session
-from app.core.minio import create_minio_client
+from app.core.supabase import create_supabase_client
 from app.core.redis import create_redis_client
 from app.classification.service import PageClassificationService
 from app.documents.repository import (
@@ -39,10 +39,10 @@ def get_redis_client(
         client.close()
 
 
-def get_minio_client(
+def get_supabase_client(
     settings: Settings = Depends(get_app_settings),
-) -> Minio:
-    return create_minio_client(settings)
+) -> Client:
+    return create_supabase_client(settings)
 
 
 def get_document_repository(
@@ -64,9 +64,9 @@ def get_document_object_repository(
 
 
 def get_object_storage_service(
-    minio_client: Minio = Depends(get_minio_client),
+    supabase_client: Client = Depends(get_supabase_client),
 ) -> ObjectStorageService:
-    return ObjectStorageService(minio_client)
+    return ObjectStorageService(supabase_client)
 
 
 def get_pdf_page_splitting_service(

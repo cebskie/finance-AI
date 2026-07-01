@@ -1,10 +1,9 @@
 from fastapi import APIRouter, Depends, HTTPException, status
-from minio import Minio
 from pydantic import BaseModel
 from redis import Redis
 from redis.exceptions import RedisError
 
-from app.api.dependencies import get_app_settings, get_minio_client, get_redis_client
+from app.api.dependencies import get_app_settings, get_redis_client
 from app.core.config import Settings
 
 router = APIRouter()
@@ -51,18 +50,3 @@ def redis_health_check(
         )
 
     return DependencyHealthResponse(status="ok", service="redis")
-
-
-@router.get("/minio", response_model=DependencyHealthResponse)
-def minio_health_check(
-    minio_client: Minio = Depends(get_minio_client),
-) -> DependencyHealthResponse:
-    try:
-        minio_client.list_buckets()
-    except Exception as exc:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail={"status": "unavailable", "service": "minio"},
-        ) from exc
-
-    return DependencyHealthResponse(status="ok", service="minio")

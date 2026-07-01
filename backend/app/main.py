@@ -28,8 +28,9 @@ from fastapi.middleware.cors import CORSMiddleware
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:3000",
+    origins = [
+        "http://localhost:3000",                    # Local development
+        "https://finance-ai-gamma-two.vercel.app",  # Production frontend
     ],
     allow_credentials=True,
     allow_methods=["*"],
